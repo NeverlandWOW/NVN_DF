@@ -184,7 +184,7 @@ namespace LuaUnit
      */
     int IsSpiritGuide(lua_State* L, Unit* unit)
     {
-        Eluna::Push(L, unit->IsAreaSpiritHealer());
+        Eluna::Push(L, unit->IsSpiritGuide());
         return 1;
     }
 
@@ -1512,13 +1512,13 @@ namespace LuaUnit
      *
      * @param uint32 displayId
      */
-    /*int SetNativeDisplayId(lua_State* L, Unit* unit)
+    int SetNativeDisplayId(lua_State* L, Unit* unit)
     {
         uint32 model = Eluna::CHECKVAL<uint32>(L, 2);
 
         unit->SetNativeDisplayId(model);
         return 0;
-    }*/
+    }
 
     /**
      * Sets the [Unit]'s facing/orientation.

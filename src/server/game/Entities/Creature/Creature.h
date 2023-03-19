@@ -80,13 +80,13 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         float GetNativeObjectScale() const override;
         void SetObjectScale(float scale) override;
-        void SetDisplayId(uint32 displayId, bool setNative = false) override;
+        void SetDisplayId(uint32 displayId, float displayScale = 1.f) override;
         void SetDisplayFromModel(uint32 modelIdx);
-        virtual uint32 GetDisplayId() const final;
-        void SetDisplayIdRaw(uint32 modelId, bool setNative = false);
+		uint32 GetDisplayId() const final;
+        void SetDisplayIdRaw(uint32 modelId, float displayScale = 1.f);
 
         std::shared_ptr<CreatureOutfit>& GetOutfit() { return m_outfit; };
-        void SetOutfit(std::shared_ptr<CreatureOutfit> const& outfit, float displayScale);
+        void SetOutfit(std::shared_ptr<CreatureOutfit> const& outfit);
         void SetMirrorImageFlag(bool on) { if (on) SetUnitFlag2(UNIT_FLAG2_MIRROR_IMAGE); else RemoveUnitFlag2(UNIT_FLAG2_MIRROR_IMAGE); };
 
         void DisappearAndDie() { ForcedDespawn(0); }
@@ -97,7 +97,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         static Creature* CreateCreatureFromDB(ObjectGuid::LowType spawnId, Map* map, bool addToMap = true, bool allowDuplicate = false);
 
         bool LoadCreaturesAddon();
-        void LoadCreaturesSparringHealth();
         void SelectLevel();
         void UpdateLevelDependantStats();
         void SelectWildBattlePetLevel();
@@ -138,9 +137,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         MovementGeneratorType GetDefaultMovementType() const override { return m_defaultMovementType; }
         void SetDefaultMovementType(MovementGeneratorType mgt) { m_defaultMovementType = mgt; }
 
-        CreatureClassifications GetCreatureClassification() const { return GetCreatureTemplate()->Classification; }
-        bool HasClassification(CreatureClassifications classification) const { return GetCreatureTemplate()->Classification == classification; }
-
         bool IsDungeonBoss() const { return (GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_DUNGEON_BOSS) != 0; }
         bool IsAffectedByDiminishingReturns() const override { return Unit::IsAffectedByDiminishingReturns() || (GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_ALL_DIMINISH) != 0; }
 
@@ -169,7 +165,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool CanCreatureAttack(Unit const* victim, bool force = true) const;
         void LoadTemplateImmunities();
         bool IsImmunedToSpellEffect(SpellInfo const* spellInfo, SpellEffectInfo const& spellEffectInfo, WorldObject const* caster, bool requireImmunityPurgesEffectAttribute = false) const override;
-        bool IsElite() const;
+        bool isElite() const;
         bool isWorldBoss() const;
 
         bool HasScalableLevels() const;
@@ -199,13 +195,11 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void SetMeleeDamageSchool(SpellSchools school) { m_meleeDamageSchoolMask = SpellSchoolMask(1 << school); }
         bool CanMelee() const { return !_staticFlags.HasFlag(CREATURE_STATIC_FLAG_NO_MELEE); }
         void SetCanMelee(bool canMelee) { _staticFlags.ApplyFlag(CREATURE_STATIC_FLAG_NO_MELEE, !canMelee); }
-        bool CanIgnoreLineOfSightWhenCastingOnMe() const { return _staticFlags.HasFlag(CREATURE_STATIC_FLAG_4_IGNORE_LOS_WHEN_CASTING_ON_ME); }
 
         bool HasSpell(uint32 spellID) const override;
 
         bool UpdateEntry(uint32 entry, CreatureData const* data = nullptr, bool updateLevel = true);
 
-        int32 GetCreatePowerValue(Powers power) const override;
         bool UpdateStats(Stats stat) override;
         bool UpdateAllStats() override;
         void UpdateArmor() override;
@@ -220,7 +214,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         uint8 GetCurrentEquipmentId() const { return m_equipmentId; }
         void SetCurrentEquipmentId(uint8 id) { m_equipmentId = id; }
 
-        float GetSpellDamageMod(CreatureClassifications classification) const;
+        float GetSpellDamageMod(int32 Rank) const;
 
         VendorItemData const* GetVendorItems() const;
         uint32 GetVendorItemCurrentCount(VendorItem const* vItem);
@@ -228,7 +222,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         CreatureTemplate const* GetCreatureTemplate() const { return m_creatureInfo; }
         CreatureData const* GetCreatureData() const { return m_creatureData; }
-        CreatureDifficulty const* GetCreatureDifficulty() const { return m_creatureDifficulty; }
         CreatureAddon const* GetCreatureAddon() const;
 
         std::string const& GetAIName() const;
@@ -349,7 +342,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void GetTransportHomePosition(float& x, float& y, float& z, float& ori) const { m_transportHomePosition.GetPosition(x, y, z, ori); }
         Position const& GetTransportHomePosition() const { return m_transportHomePosition; }
 
-        uint32 GetWaypointPathId() const { return _waypointPathId; }
+        uint32 GetWaypointPath() const { return _waypointPathId; }
         void LoadPath(uint32 pathid) { _waypointPathId = pathid; }
 
         // nodeId, pathId
@@ -378,7 +371,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void SetRespawnCompatibilityMode(bool mode = true) { m_respawnCompatibilityMode = mode; }
         bool GetRespawnCompatibilityMode() { return m_respawnCompatibilityMode; }
 
-        static float GetDamageMod(CreatureClassifications classification);
+        static float _GetDamageMod(int32 Rank);
 
         float m_SightDistance, m_CombatDistance;
 
@@ -409,11 +402,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void AtEngage(Unit* target) override;
         void AtDisengage() override;
 
-        void OverrideSparringHealthPct(std::vector<float> const& healthPct);
-        float GetSparringHealthPct() { return _sparringHealthPct; }
-        uint32 CalculateDamageForSparring(Unit* attacker, uint32 damage);
-        bool ShouldFakeDamageFrom(Unit* attacker);
-
         bool HasCanSwimFlagOutOfCombat() const
         {
             return !_isMissingCanSwimFlagOutOfCombat;
@@ -435,12 +423,10 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool HasFlag(CreatureStaticFlags8 flag) const { return _staticFlags.HasFlag(flag); }
 
         uint32 GetGossipMenuId() const;
-        void SetGossipMenuId(uint32 gossipMenuId);
+        void SetGossipMenuId(Optional<uint32> gossipMenuId);
 
         uint32 GetTrainerId() const;
         void SetTrainerId(Optional<uint32> trainerId);
-
-        void SummonGraveyardTeleporter();
 
     protected:
         bool CreateFromProto(ObjectGuid::LowType guidlow, uint32 entry, CreatureData const* data = nullptr, uint32 vehId = 0);
@@ -449,7 +435,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         // vendor items
         VendorItemCounts m_vendorItemCounts;
 
-        static float GetHealthMod(CreatureClassifications classification);
+        static float _GetHealthMod(int32 Rank);
 
         GuidUnorderedSet m_tapList;
         bool m_dontClearTapListOnEvade;
@@ -487,9 +473,8 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         bool DisableReputationGain;
 
-        CreatureTemplate const* m_creatureInfo;
+        CreatureTemplate const* m_creatureInfo;                 // Can differ from sObjectMgr->GetCreatureTemplate(GetEntry()) in difficulty mode > 0
         CreatureData const* m_creatureData;
-        CreatureDifficulty const* m_creatureDifficulty;
         std::array<std::string_view, 3> m_stringIds;
         Optional<std::string> m_scriptStringId;
 
@@ -527,8 +512,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         time_t _lastDamagedTime; // Part of Evade mechanics
         CreatureTextRepeatGroup m_textRepeat;
 
-        void ApplyAllStaticFlags(CreatureStaticFlagsHolder const& flags);
-
         CreatureStaticFlagsHolder _staticFlags;
 
         // Regenerate health
@@ -536,9 +519,8 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         bool _isMissingCanSwimFlagOutOfCombat;
 
-        uint32 _gossipMenuId;
+        Optional<uint32> _gossipMenuId;
         Optional<uint32> _trainerId;
-        float _sparringHealthPct;
 };
 
 class TC_GAME_API AssistDelayEvent : public BasicEvent

@@ -360,7 +360,7 @@ namespace LuaGroup
         if (icon >= 99)
             return luaL_argerror(L, 2, "valid target icon expected");
 
-        group->SetTargetIcon(icon, setter, target);
+        group->SetTargetIcon(icon, setter, target, 0);
         return 0;
     }
 

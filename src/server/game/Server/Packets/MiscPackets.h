@@ -28,7 +28,6 @@
 #include "Player.h"
 #include "Position.h"
 #include "SharedDefines.h"
-#include "WowTime.h"
 #include <array>
 #include <map>
 
@@ -82,8 +81,8 @@ namespace WorldPackets
 
             float NewSpeed = 0.0f;
             int32 ServerTimeHolidayOffset = 0;
-            WowTime GameTime;
-            WowTime ServerTime;
+            uint32 GameTime = 0;
+            uint32 ServerTime = 0;
             int32 GameTimeHolidayOffset = 0;
         };
 
@@ -114,9 +113,7 @@ namespace WorldPackets
             Optional<CurrencyGainSource> QuantityGainSource;
             Optional<CurrencyDestroyReason> QuantityLostSource;
             Optional<uint32> FirstCraftOperationID;
-            Optional<Timestamp<>> NextRechargeTime;
-            Optional<Timestamp<>> RechargeCycleStartTime;
-            Optional<int32> OverflownCurrencyID;    // what currency was originally changed but couldn't be incremented because of a cap
+            Optional<Timestamp<>> LastSpendTime;
             bool SuppressChatLog = false;
         };
 
@@ -142,8 +139,7 @@ namespace WorldPackets
                 Optional<int32> TrackedQuantity;
                 Optional<int32> MaxQuantity;
                 Optional<int32> TotalEarned;
-                Optional<Timestamp<>> NextRechargeTime;
-                Optional<Timestamp<>> RechargeCycleStartTime;
+                Optional<Timestamp<>> LastSpendTime;
                 uint8 Flags = 0;
             };
 
@@ -531,7 +527,7 @@ namespace WorldPackets
 
             int32 Min = 0;
             int32 Max = 0;
-            Optional<uint8> PartyIndex;
+            uint8 PartyIndex = 0;
         };
 
         class RandomRoll final : public ServerPacket
@@ -551,16 +547,14 @@ namespace WorldPackets
         class EnableBarberShop final : public ServerPacket
         {
         public:
-            EnableBarberShop() : ServerPacket(SMSG_ENABLE_BARBER_SHOP, 1) { }
+            EnableBarberShop() : ServerPacket(SMSG_ENABLE_BARBER_SHOP, 0) { }
 
-            WorldPacket const* Write() override;
-
-            uint8 CustomizationScope = 0;
+            WorldPacket const* Write() override { return &_worldPacket; }
         };
 
         struct PhaseShiftDataPhase
         {
-            uint32 PhaseFlags = 0;
+            uint16 PhaseFlags = 0;
             uint16 Id = 0;
         };
 
@@ -1004,6 +998,18 @@ namespace WorldPackets
 
             ObjectGuid ObjGUID;
             bool IsUpgrade;
+        };
+
+        class UIItemInteractionOpenNpc  final : public ServerPacket
+        {
+        public:
+            UIItemInteractionOpenNpc() : ServerPacket(SMSG_UI_ITEM_INTERACTION_NPC, 23) {}
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid ObjectGUID;
+            int32 UiUnk1 = 0;
+            int32 UiUnk2 = 0;
         };
     }
 }

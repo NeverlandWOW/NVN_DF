@@ -47,7 +47,7 @@ void Roleplay::LoadAllTables()
     LoadCreatureTemplateExtras();
     LoadCustomNpcs();
 
-    TC_LOG_INFO("server.loading", ">> Loaded Roleplay tables in {} ms", GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded Roleplay tables in %u ms", GetMSTimeDiffToNow(oldMSTime));
 }
 
 #pragma region CREATURE
@@ -383,7 +383,6 @@ void Roleplay::CreatureDelete(Creature* creature)
 {
     creature->CombatStop();
     creature->DeleteFromDB(creature->GetSpawnId());
-    // TODO: This should already happen in DeleteFromDB, check this.
     creature->AddObjectToRemoveList();
     // Remove spawn from custom npc spawns
     for (auto it : _customNpcStore)
@@ -704,7 +703,7 @@ void Roleplay::LoadCustomNpcs()
         ++count;
     } while (result->NextRow());
 
-    TC_LOG_INFO("server.loading", ">> Loaded {} custom npcs in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded %u custom npcs in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
 void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
@@ -712,12 +711,6 @@ void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
     std::shared_ptr<CreatureOutfit> co(new CreatureOutfit());
 
     uint32 outfitId = sConfigMgr->GetInt64Default("Roleplay.CustomNpc.OutfitIdStart", 200001) + sObjectMgr->_creatureOutfitStore.size();
-    if (!sObjectMgr->_creatureOutfitStore.empty()) {
-        using pairtype = std::pair<uint32, std::shared_ptr<CreatureOutfit>>;
-        outfitId = std::max_element(sObjectMgr->_creatureOutfitStore.begin(), sObjectMgr->_creatureOutfitStore.end(),
-            [](pairtype a, pairtype b) { return a.second->id < b.second->id; })->second->id + 1;
-    }
-
     co->id = outfitId;
     co->npcsoundsid = 0;
     co->race = player->GetRace();
@@ -766,7 +759,6 @@ void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
     sObjectMgr->_creatureOutfitStore[outfitId] = std::move(co);
 
     CreatureTemplate creatureTemplate;
-
     uint32 npcCreatureTemplateId = sConfigMgr->GetInt64Default("Freedom.CustomNpc.CreatureTemplateIdStart", 400000);
     if (!_customNpcStore.empty()) {
         using pairtype = std::pair<std::string, CustomNpcData>;
@@ -775,10 +767,17 @@ void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
     }
     creatureTemplate.Entry = npcCreatureTemplateId;
 
+    for (uint32 i = 0; i < MAX_CREATURE_DIFFICULTIES; ++i)
+        creatureTemplate.DifficultyEntry[i] = 0;
+
     for (uint8 i = 0; i < MAX_KILL_CREDIT; ++i)
         creatureTemplate.KillCredit[i] = 0;
 
     creatureTemplate.Name = key;
+    creatureTemplate.GossipMenuId = 0;
+    creatureTemplate.minlevel = 1;
+    creatureTemplate.maxlevel = 1;
+    creatureTemplate.HealthScalingExpansion = EXPANSION_SHADOWLANDS;
     creatureTemplate.RequiredExpansion = EXPANSION_CLASSIC;
     creatureTemplate.VignetteID = 0;
     creatureTemplate.faction = 35;
@@ -796,9 +795,15 @@ void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
     creatureTemplate.unit_flags = 0;
     creatureTemplate.unit_flags2 = 0;
     creatureTemplate.unit_flags3 = 0;
+    creatureTemplate.dynamicflags = 0;
     creatureTemplate.family = CREATURE_FAMILY_NONE;
     creatureTemplate.trainer_class = 0;
     creatureTemplate.type = CreatureType::CREATURE_TYPE_HUMANOID;
+    creatureTemplate.type_flags = 0;
+    creatureTemplate.type_flags2 = 2;
+    creatureTemplate.lootid = 0;
+    creatureTemplate.pickpocketLootId = 0;
+    creatureTemplate.SkinLootId = 0;
 
     for (uint8 i = SPELL_SCHOOL_HOLY; i < MAX_SPELL_SCHOOL; ++i)
         creatureTemplate.resistance[i] = 0;
@@ -807,11 +812,21 @@ void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
         creatureTemplate.spells[i] = 0;
 
     creatureTemplate.VehicleId = 0;
+    creatureTemplate.mingold = 0;
+    creatureTemplate.maxgold = 0;
     creatureTemplate.AIName = "";
     creatureTemplate.MovementType = 0;
+    creatureTemplate.HoverHeight = 1;
+    creatureTemplate.ModHealth = 1.0f;
+    creatureTemplate.ModHealthExtra = 1.0f;
+    creatureTemplate.ModMana = 1.0f;
+    creatureTemplate.ModManaExtra = 1.0f;
+    creatureTemplate.ModArmor = 1.0f;
+    creatureTemplate.ModDamage = 1.0f;
     creatureTemplate.ModExperience = 1.0f;
     creatureTemplate.RacialLeader = false;
     creatureTemplate.movementId = 100;
+    creatureTemplate.CreatureDifficultyID = 204488;
     creatureTemplate.WidgetSetID = 0;
     creatureTemplate.WidgetSetUnitConditionID = 0;
     creatureTemplate.RegenHealth = 1;
@@ -824,7 +839,7 @@ void Roleplay::CreateCustomNpcFromPlayer(Player* player, std::string const& key)
 
     if (sWorld->getBoolConfig(CONFIG_CACHE_DATA_QUERIES)) {
         for (uint8 loc = LOCALE_enUS; loc < TOTAL_LOCALES; ++loc)
-            creatureTemplate.QueryData[loc] = creatureTemplate.BuildQueryData(static_cast<LocaleConstant>(loc), DIFFICULTY_NONE);
+            creatureTemplate.QueryData[loc] = creatureTemplate.BuildQueryData(static_cast<LocaleConstant>(loc));
     }
 
     sObjectMgr->CheckCreatureTemplate(&creatureTemplate);
@@ -945,7 +960,7 @@ void Roleplay::SetCustomNpcDisplayId(std::string const& key, uint8 variationId, 
 {
     uint32 templateId = _customNpcStore[key].templateId;
     EnsureNpcModelExists(templateId, variationId);
-    TC_LOG_DEBUG("roleplay", "ROLEPLAY: Setting model display id for custom npc '%s' variation '%u' to '%u'", key.c_str(), variationId, displayId);
+    TC_LOG_DEBUG("freedom", "FREEDOMMGR: Setting model display id for custom npc '%s' variation '%u' to '%u'", key.c_str(), variationId, displayId);
     CreatureTemplate cTemplate = sObjectMgr->_creatureTemplateStore[templateId];
     CreatureModel model = cTemplate.Models[variationId - 1];
     model.CreatureDisplayID = displayId;
@@ -959,7 +974,7 @@ void Roleplay::SetCustomNpcModelScale(std::string const& key, uint8 variationId,
 {
     uint32 templateId = _customNpcStore[key].templateId;
     EnsureNpcModelExists(templateId, variationId);
-    TC_LOG_DEBUG("roleplay", "ROLEPLAY: Setting model scale for custom npc '%s' variation '%u' to '%f'", key.c_str(), variationId, displayScale);
+    TC_LOG_DEBUG("freedom", "FREEDOMMGR: Setting model scale for custom npc '%s' variation '%u' to '%f'", key.c_str(), variationId, displayScale);
     CreatureTemplate cTemplate = sObjectMgr->_creatureTemplateStore[templateId];
     CreatureModel model = cTemplate.Models[variationId - 1];
     model.DisplayScale = displayScale;
@@ -1000,6 +1015,7 @@ void Roleplay::SetCustomNpcTameable(std::string const& key, bool tameable)
     CreatureTemplate cTemplate = sObjectMgr->_creatureTemplateStore[templateId];
     cTemplate.type = tameable ? 1 : 0;
     cTemplate.family = tameable ? CREATURE_FAMILY_GORILLA : CREATURE_FAMILY_NONE;
+    cTemplate.type_flags = tameable ? 1 : 0;
 
     sObjectMgr->_creatureTemplateStore[cTemplate.Entry] = cTemplate;
     SaveNpcCreatureTemplateToDb(cTemplate);
@@ -1100,7 +1116,7 @@ void Roleplay::SaveNpcOutfitToDb(uint32 templateId, uint8 variationId)
     stmt->setUInt64(index++, co->guild);
     trans->Append(stmt);
 
-    // "REPLACE INTO creature_template_model (CreatureId, Idx, CreatureDisplayId, DisplayScale, Probability) VALUES (?, ?, ?, ?, 1)"
+    // "REPLACE INTO creature_template_model (CreatureId, Idx, CreatureDisplayId, DisplayScale, Probability) VALUES (?, ?, ?, 1, 1)"
     stmt = WorldDatabase.GetPreparedStatement(WORLD_REP_CREATURE_TEMPLATE_MODEL);
     stmt->setUInt32(0, templateId);
     stmt->setUInt8(1, variationId - 1);
@@ -1150,13 +1166,13 @@ void Roleplay::SaveNpcCreatureTemplateToDb(CreatureTemplate cTemplate)
     SessionMap const& smap = sWorld->GetAllSessions();
     for (SessionMap::const_iterator iter = smap.begin(); iter != smap.end(); ++iter)
     {
-        TC_LOG_DEBUG("roleplay", "ROLEPLAY: Sending query packet for creatureTemplate '%s' to '%s'.", cTemplate.Name.c_str(), iter->second->GetPlayer()->GetName().c_str());
+        TC_LOG_DEBUG("freedom", "FREEDOMMGR: Sending query packet for creatureTemplate '%s' to '%s'.", cTemplate.Name.c_str(), iter->second->GetPlayer()->GetName().c_str());
         if (sWorld->getBoolConfig(CONFIG_CACHE_DATA_QUERIES)) {
             iter->second->SendPacket(&cTemplate.QueryData[static_cast<uint32>(iter->second->GetSessionDbLocaleIndex())]);
         }
         else
         {
-            WorldPacket response = cTemplate.BuildQueryData(iter->second->GetSessionDbLocaleIndex(), DIFFICULTY_NONE);
+            WorldPacket response = cTemplate.BuildQueryData(iter->second->GetSessionDbLocaleIndex());
             iter->second->SendPacket(&response);
         }
     }
@@ -1196,6 +1212,9 @@ void Roleplay::ReloadSpawnedCustomNpcs(std::string const& key)
             uint8 modelId = urand(0u, sObjectMgr->_creatureTemplateStore[data.templateId].Models.size() - 1);
             CreatureModel model = sObjectMgr->_creatureTemplateStore[data.templateId].Models[modelId];
             creature->SetDisplayId(model.CreatureDisplayID, model.DisplayScale);
+            if (CreatureOutfit::IsFake(model.CreatureDisplayID)) {
+                creature->SetOutfit(sObjectMgr->_creatureOutfitStore[model.CreatureDisplayID]);
+            }
             creature->SetName(sObjectMgr->_creatureTemplateStore[data.templateId].Name);
             creature->LoadEquipment(urand(1u, sObjectMgr->_equipmentInfoStore[data.templateId].size()));
             TC_LOG_DEBUG("roleplay", "ROLEPLAY: Reloaded creature id '%lu'", spawn);
@@ -1286,7 +1305,7 @@ void Roleplay::EnsureNpcOutfitExists(uint32 templateId, uint8 variationId, float
             }
         }
         if (!setOutfit) {
-            TC_LOG_DEBUG("roleplay", "ROLEPLAY: Custom NPC template '%u' has no outfits, selecting first option in store for variation '%u'.", templateId, variationId);
+            TC_LOG_DEBUG("freedom", "FREEDOMMGR: Custom NPC template '%u' has no outfits, selecting first option in store for variation '%u'.", templateId, variationId);
             // Custom NPC has only used displayids, in this case we'll just take the first creatureoutfit available.
             lastOutfit = sObjectMgr->_creatureOutfitStore.begin()->second;
         }
@@ -1297,7 +1316,7 @@ void Roleplay::EnsureNpcOutfitExists(uint32 templateId, uint8 variationId, float
 
             std::shared_ptr<CreatureOutfit> outfit(new CreatureOutfit());
             uint32 outfitId = maxOutfitId + ++created;
-            TC_LOG_DEBUG("roleplay", "ROLEPLAY: Adding outfit '%u' to create variation '%u' for template '%u'.", outfitId, variation, templateId);
+            TC_LOG_DEBUG("freedom", "FREEDOMMGR: Adding outfit '%u' to create variation '%u' for template '%u'.", outfitId, variation, templateId);
             outfit->id = outfitId;
             outfit->npcsoundsid = 0;
             outfit->race = lastOutfit->race;
@@ -1325,13 +1344,13 @@ void Roleplay::EnsureNpcOutfitExists(uint32 templateId, uint8 variationId, float
     }
 
 
-    TC_LOG_DEBUG("roleplay", "ROLEPLAY: Model variation '%u' for template '%u' ensured.", variationId, templateId);
+    TC_LOG_DEBUG("freedom", "FREEDOMMGR: Model variation '%u' for template '%u' ensured.", variationId, templateId);
 }
 
 void Roleplay::EnsureEquipmentInfoExists(uint32 templateId, uint8 variationId)
 {
     if (!sObjectMgr->_equipmentInfoStore[templateId].count(variationId)) {
-        TC_LOG_DEBUG("roleplay", "ROLEPLAY: Adding equipment variation '%u' for template '%u'.", variationId, templateId);
+        TC_LOG_DEBUG("freedom", "FREEDOMMGR: Adding equipment variation '%u' for template '%u'.", variationId, templateId);
         EquipmentInfo equipInfo;
         for (uint8 equipmentInfoSlot = 0; equipmentInfoSlot < MAX_EQUIPMENT_ITEMS; equipmentInfoSlot++) {
             equipInfo.Items[equipmentInfoSlot].ItemId = 0;
@@ -1340,7 +1359,7 @@ void Roleplay::EnsureEquipmentInfoExists(uint32 templateId, uint8 variationId)
         }
         sObjectMgr->_equipmentInfoStore[templateId][variationId] = equipInfo;
     }
-    TC_LOG_DEBUG("roleplay", "ROLEPLAY: Equipment variation '%u' for template '%u' ensured.", variationId, templateId);
+    TC_LOG_DEBUG("freedom", "FREEDOMMGR: Equipment variation '%u' for template '%u' ensured.", variationId, templateId);
 }
 
 void Roleplay::EnsureNpcModelExists(uint32 templateId, uint8 variationId)
@@ -1350,12 +1369,12 @@ void Roleplay::EnsureNpcModelExists(uint32 templateId, uint8 variationId)
     if (modelsSize < variationId) {
         for (uint8 i = modelsSize; i < variationId; i++) {
             uint32 prevDisplayId = cTemplate.Models[modelsSize - 1].CreatureDisplayID;
-            TC_LOG_DEBUG("roleplay", "ROLEPLAY: Creating model variation '%u' for template '%u' using displayid: '%u'.", i, templateId, prevDisplayId);
+            TC_LOG_DEBUG("freedom", "FREEDOMMGR: Creating model variation '%u' for template '%u' using displayid: '%u'.", i, templateId, prevDisplayId);
             cTemplate.Models.push_back(CreatureModel(prevDisplayId, 1, 1));
             sObjectMgr->_creatureTemplateStore[templateId] = cTemplate;
         }
     }
-    TC_LOG_DEBUG("roleplay", "ROLEPLAY: Model variation '%u' for template '%u' ensured.", variationId, templateId);
+    TC_LOG_DEBUG("freedom", "FREEDOMMGR: Model variation '%u' for template '%u' ensured.", variationId, templateId);
 }
 
 uint8 Roleplay::GetModelVariationCountForNpc(std::string const& key) {

@@ -291,7 +291,7 @@ ElunaRegister<Unit> UnitMethods[] =
     { "SetMaxPower", &LuaUnit::SetMaxPower },
     { "SetPowerType", &LuaUnit::SetPowerType },
     { "SetDisplayId", &LuaUnit::SetDisplayId },
-    //{ "SetNativeDisplayId", &LuaUnit::SetNativeDisplayId }, Trinity delete this func
+    { "SetNativeDisplayId", &LuaUnit::SetNativeDisplayId },
     { "SetFacing", &LuaUnit::SetFacing },
     { "SetFacingToObject", &LuaUnit::SetFacingToObject },
     { "SetSpeed", &LuaUnit::SetSpeed },
@@ -443,7 +443,7 @@ ElunaRegister<Player> PlayerMethods[] =
     { "GetInGameTime", &LuaPlayer::GetInGameTime },
     { "GetComboPoints", &LuaPlayer::GetComboPoints },
     { "GetGuildName", &LuaPlayer::GetGuildName },
-    //{ "GetActiveSpec", &LuaPlayer::GetActiveSpec },
+    { "GetActiveSpec", &LuaPlayer::GetActiveSpec },
     { "GetSpecsCount", &LuaPlayer::GetSpecsCount },
     { "GetSpellCooldownDelay", &LuaPlayer::GetSpellCooldownDelay },
     { "GetGuildRank", &LuaPlayer::GetGuildRank },
@@ -534,7 +534,7 @@ ElunaRegister<Player> PlayerMethods[] =
     // {"HasPendingBind", &LuaPlayer::HasPendingBind},                                      // :HasPendingBind() - UNDOCUMENTED - Returns true if the player has a pending instance bind
     { "HasAchieved", &LuaPlayer::HasAchieved },
     { "SetAchievement", &LuaPlayer::SetAchievement },
-    //{ "CanUninviteFromGroup", &LuaPlayer::CanUninviteFromGroup },
+    { "CanUninviteFromGroup", &LuaPlayer::CanUninviteFromGroup },
     { "IsRested", &LuaPlayer::IsRested },
     // {"CanFlyInZone", &LuaPlayer::CanFlyInZone},                                          // :CanFlyInZone(mapid, zone) - UNDOCUMENTED - Returns true if the player can fly in the area
     // {"IsNeverVisible", &LuaPlayer::IsNeverVisible},                                      // :IsNeverVisible() - UNDOCUMENTED - Returns true if the player is never visible
@@ -630,7 +630,7 @@ ElunaRegister<Player> PlayerMethods[] =
     { "SendTrainerList", &LuaPlayer::SendTrainerList },
     { "SendListInventory", &LuaPlayer::SendListInventory },
     { "SendShowBank", &LuaPlayer::SendShowBank },
-    //{ "SendTabardVendorActivate", &LuaPlayer::SendTabardVendorActivate },
+    { "SendTabardVendorActivate", &LuaPlayer::SendTabardVendorActivate },
     { "SendSpiritResurrect", &LuaPlayer::SendSpiritResurrect },
     { "SendTaxiMenu", &LuaPlayer::SendTaxiMenu },
     { "SendUpdateWorldState", &LuaPlayer::SendUpdateWorldState },

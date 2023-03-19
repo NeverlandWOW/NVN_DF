@@ -67,7 +67,6 @@ struct FactionTemplateEntry;
 struct Loot;
 struct PositionFullTerrainStatus;
 struct QuaternionData;
-struct SpellPowerCost;
 enum ZLiquidStatus : uint32;
 
 namespace WorldPackets
@@ -439,6 +438,26 @@ class FlaggedValuesArray32
 
 struct FindCreatureOptions
 {
+    FindCreatureOptions() = default;
+
+    FindCreatureOptions& SetCreatureId(uint32 creatureId) { CreatureId = creatureId; return *this; }
+    FindCreatureOptions& SetStringId(std::string_view stringId) { StringId = stringId; return *this; }
+
+    FindCreatureOptions& SetIsAlive(bool isAlive) { IsAlive = isAlive; return *this; }
+    FindCreatureOptions& SetIsInCombat(bool isInCombat) { IsInCombat = isInCombat; return *this; }
+    FindCreatureOptions& SetIsSummon(bool isSummon) { IsSummon = isSummon; return *this; }
+
+    FindCreatureOptions& SetIgnorePhases(bool ignorePhases) { IgnorePhases = ignorePhases; return *this; }
+    FindCreatureOptions& SetIgnoreNotOwnedPrivateObjects(bool ignoreNotOwnedPrivateObjects) { IgnoreNotOwnedPrivateObjects = ignoreNotOwnedPrivateObjects; return *this; }
+    FindCreatureOptions& SetIgnorePrivateObjects(bool ignorePrivateObjects) { IgnorePrivateObjects = ignorePrivateObjects; return *this; }
+
+    FindCreatureOptions& SetHasAura(uint32 spellId) { AuraSpellId = spellId; return *this; }
+    FindCreatureOptions& SetOwner(ObjectGuid ownerGuid) { OwnerGuid = ownerGuid; return *this; }
+    FindCreatureOptions& SetCharmer(ObjectGuid charmerGuid) { CharmerGuid = charmerGuid; return *this; }
+    FindCreatureOptions& SetCreator(ObjectGuid creatorGuid) { CreatorGuid = creatorGuid; return *this; }
+    FindCreatureOptions& SetDemonCreator(ObjectGuid demonCreatorGuid) { DemonCreatorGuid = demonCreatorGuid; return *this; }
+    FindCreatureOptions& SetPrivateObjectOwner(ObjectGuid privateObjectOwnerGuid) { PrivateObjectOwnerGuid = privateObjectOwnerGuid; return *this; }
+
     Optional<uint32> CreatureId;
     Optional<std::string_view> StringId;
 
@@ -446,9 +465,9 @@ struct FindCreatureOptions
     Optional<bool> IsInCombat;
     Optional<bool> IsSummon;
 
-    bool IgnorePhases = false;
-    bool IgnoreNotOwnedPrivateObjects = true;
-    bool IgnorePrivateObjects = false;
+    bool IgnorePhases;
+    bool IgnoreNotOwnedPrivateObjects;
+    bool IgnorePrivateObjects;
 
     Optional<uint32> AuraSpellId;
     Optional<ObjectGuid> OwnerGuid;
@@ -456,23 +475,12 @@ struct FindCreatureOptions
     Optional<ObjectGuid> CreatorGuid;
     Optional<ObjectGuid> DemonCreatorGuid;
     Optional<ObjectGuid> PrivateObjectOwnerGuid;
-};
 
-struct FindGameObjectOptions
-{
-    Optional<uint32> GameObjectId;
-    Optional<std::string_view> StringId;
+    FindCreatureOptions(FindCreatureOptions const&) = delete;
+    FindCreatureOptions(FindCreatureOptions&&) = delete;
 
-    Optional<bool> IsSummon;
-    Optional<bool> IsSpawned = true; // most searches should be for spawned objects only, to search for "any" just clear this field at call site
-
-    bool IgnorePhases = false;
-    bool IgnoreNotOwnedPrivateObjects = true;
-    bool IgnorePrivateObjects = false;
-
-    Optional<ObjectGuid> OwnerGuid;
-    Optional<ObjectGuid> PrivateObjectOwnerGuid;
-    Optional<GameobjectTypes> GameObjectType;
+    FindCreatureOptions& operator=(FindCreatureOptions const&) = delete;
+    FindCreatureOptions& operator=(FindCreatureOptions&&) = delete;
 };
 
 class TC_GAME_API WorldObject : public Object, public WorldLocation
@@ -585,7 +593,6 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         void PlayDistanceSound(uint32 soundId, Player* target = nullptr);
         void PlayDirectSound(uint32 soundId, Player* target = nullptr, uint32 broadcastTextId = 0);
         void PlayDirectMusic(uint32 musicId, Player* target = nullptr);
-        void PlayObjectSound(int32 soundKitId, ObjectGuid targetObject, Player* target = nullptr, int32 broadcastTextId = 0);
 
         void AddObjectToRemoveList();
 
@@ -626,12 +633,10 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         Creature*   FindNearestCreature(uint32 entry, float range, bool alive = true) const;
         Creature*   FindNearestCreatureWithOptions(float range, FindCreatureOptions const& options) const;
         GameObject* FindNearestGameObject(uint32 entry, float range, bool spawnedOnly = true) const;
-        GameObject* FindNearestGameObjectWithOptions(float range, FindGameObjectOptions const& options) const;
         GameObject* FindNearestUnspawnedGameObject(uint32 entry, float range) const;
         GameObject* FindNearestGameObjectOfType(GameobjectTypes type, float range) const;
-        Player*     SelectNearestPlayer(float range) const;
+        Player* SelectNearestPlayer(float distance) const;
 
-        virtual ObjectGuid GetCreatorGUID() const = 0;
         virtual ObjectGuid GetOwnerGUID() const = 0;
         virtual ObjectGuid GetCharmerOrOwnerGUID() const { return GetOwnerGUID(); }
         ObjectGuid GetCharmerOrOwnerOrOwnGUID() const;
@@ -650,7 +655,7 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         float GetSpellMinRangeForTarget(Unit const* target, SpellInfo const* spellInfo) const;
 
         double ApplyEffectModifiers(SpellInfo const* spellInfo, uint8 effIndex, double value) const;
-        int32 CalcSpellDuration(SpellInfo const* spellInfo, std::vector<SpellPowerCost> const* powerCosts) const;
+        int32 CalcSpellDuration(SpellInfo const* spellInfo) const;
         int32 ModSpellDuration(SpellInfo const* spellInfo, WorldObject const* target, int32 duration, bool positive, uint32 effectMask) const;
         void ModSpellCastTime(SpellInfo const* spellInfo, int32& castTime, Spell* spell = nullptr) const;
         void ModSpellDurationTime(SpellInfo const* spellInfo, int32& durationTime, Spell* spell = nullptr) const;
@@ -691,9 +696,6 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         void GetGameObjectListWithEntryInGrid(Container& gameObjectContainer, uint32 entry, float maxSearchRange = 250.0f) const;
 
         void GetGameObjectListWithEntryInGridAppend(std::list<GameObject*>& lList, uint32 uiEntry, float fMaxSearchRange = 250.0f) const;
-
-        template <typename Container>
-        void GetGameObjectListWithOptionsInGrid(Container& gameObjectContainer, float maxSearchRange, FindGameObjectOptions const& options) const;
 
         template <typename Container>
         void GetCreatureListWithEntryInGrid(Container& creatureContainer, uint32 entry, float maxSearchRange = 250.0f) const;

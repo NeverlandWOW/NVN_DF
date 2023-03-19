@@ -116,6 +116,7 @@ public:
             { "follow",         HandleNpcFollowCommand,            rbac::RBAC_PERM_COMMAND_NPC_FOLLOW,         Console::No },
             { "follow stop",    HandleNpcUnFollowCommand,          rbac::RBAC_PERM_COMMAND_NPC_FOLLOW,         Console::No },
             { "evade",          HandleNpcEvadeCommand,             rbac::RBAC_PERM_COMMAND_NPC_EVADE,          Console::No },
+			{ "go",             HandleNpcGoCommand,                rbac::RBAC_PERM_COMMAND_NPC_MOVE,           Console::No },
             { "showloot",       HandleNpcShowLootCommand,          rbac::RBAC_PERM_COMMAND_NPC_SHOWLOOT,       Console::No },
         };
         static ChatCommandTable commandTable =
@@ -533,10 +534,7 @@ public:
 
         handler->PSendSysMessage(LANG_NPCINFO_DYNAMIC_FLAGS, target->GetDynamicFlags());
         handler->PSendSysMessage(LANG_COMMAND_RAWPAWNTIMES, defRespawnDelayStr.c_str(), curRespawnDelayStr.c_str());
-
-        CreatureDifficulty const* creatureDifficulty = target->GetCreatureDifficulty();
-        handler->PSendSysMessage(LANG_NPCINFO_LOOT, creatureDifficulty->LootID, creatureDifficulty->PickPocketLootID, creatureDifficulty->SkinLootID);
-
+        handler->PSendSysMessage(LANG_NPCINFO_LOOT,  cInfo->lootid, cInfo->pickpocketLootId, cInfo->SkinLootId);
         handler->PSendSysMessage(LANG_NPCINFO_DUNGEON_ID, target->GetInstanceId());
 
         if (CreatureData const* data = sObjectMgr->GetCreatureData(target->GetSpawnId()))
@@ -682,7 +680,7 @@ public:
             return false;
         }
 		
-		WorldDatabase.PQuery("INSERT INTO creature_addon(guid,emote) VALUES('{}',{});", target->GetSpawnId(), emote);
+		WorldDatabase.PQuery("INSERT INTO creature_addon(guid,emote) VALUES(%i,%i);", target->GetSpawnId(), emote);
 
         target->SetEmoteState(Emote(emote));
 
@@ -708,7 +706,8 @@ public:
             return false;
         }
 
-        creature->SetDisplayId(displayId, true);
+        creature->SetDisplayId(displayId);
+        creature->SetNativeDisplayId(displayId);
 
         creature->SaveToDB();
 
@@ -1107,7 +1106,7 @@ public:
 
         CreatureTemplate const* cInfo = creatureTarget->GetCreatureTemplate();
 
-        if (!cInfo->IsTameable (player->CanTameExoticPets(), creatureTarget->GetCreatureDifficulty()))
+        if (!cInfo->IsTameable (player->CanTameExoticPets()))
         {
             handler->PSendSysMessage (LANG_CREATURE_NON_TAMEABLE, cInfo->Entry);
             handler->SetSentErrorMessage (true);
@@ -1368,8 +1367,10 @@ public:
         return true;
     }
 	
-	static bool HandleNpcSetScaleCommand(ChatHandler* handler, float scale)
+	static bool HandleNpcSetScaleCommand(ChatHandler* handler, const char* args)
     {
+        if (!*args)
+            return false;
 
         Creature* creature = handler->getSelectedCreature();
         if (!creature)
@@ -1378,6 +1379,8 @@ public:
             handler->SetSentErrorMessage(true);
             return false;
         }
+
+        float scale = (float)atof((char*)args);
 
         if (scale <= 0.0f)
         {
@@ -1396,8 +1399,11 @@ public:
     }
 
     // npc set aura
-    static bool HandleNpcSetAuraCommand(ChatHandler* handler, SpellInfo const* spellInfo)
+    static bool HandleNpcSetAuraCommand(ChatHandler* handler, char const* args)
     {
+        if (!*args)
+            return false;
+
 
         Creature* target = handler->getSelectedCreature();
         ObjectGuid::LowType guidLow = UI64LIT(0);
@@ -1409,7 +1415,7 @@ public:
             return false;
         }
 
-        uint32 spellId = spellInfo->Id;
+        uint32 spellId = handler->extractSpellIdFromLink((char*)args);
 
         if (spellId == 172036 || spellId == 142873 || spellId == 163465 ||
             spellId == 187998 || spellId == 190430 || spellId == 190429 ||
@@ -1435,7 +1441,7 @@ public:
         //Cot? SQL
         guidLow = target->GetSpawnId();
         std::string auraString = std::to_string(uint32(spellId));
-        QueryResult guidSql = WorldDatabase.PQuery("SELECT auras FROM creature_addon WHERE guid = '{}'", guidLow);
+        QueryResult guidSql = WorldDatabase.PQuery("SELECT auras FROM creature_addon WHERE guid = %u", guidLow);
         if (!guidSql && spellId != 0)
         {
             WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_INS_SET_AURA);
@@ -1464,8 +1470,12 @@ public:
 
     }
 
-    static bool HandleNpcSetMountCommand(ChatHandler* handler, uint32 mount)
+    static bool HandleNpcSetMountCommand(ChatHandler* handler, char const* args)
     {
+        if (!*args)
+            return false;
+
+        uint32 mount = atoi((char*)args);
 
         Creature* target = handler->getSelectedCreature();
         ObjectGuid::LowType guidLow = UI64LIT(0);
@@ -1482,7 +1492,7 @@ public:
 
      //Cot? SQL
      guidLow = target->GetSpawnId();
-     QueryResult guidSql = WorldDatabase.PQuery("SELECT guid FROM creature_addon WHERE guid = '{}'", guidLow);
+     QueryResult guidSql = WorldDatabase.PQuery("SELECT guid FROM creature_addon WHERE guid = %u", guidLow);
      if (!guidSql)
      {
          WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_INS_SET_MOUNT);
@@ -1503,8 +1513,12 @@ public:
  }
 
  // npc set animkit
- static bool HandleNpcSetAnimKitCommand(ChatHandler* handler, uint16 animkit)
+ static bool HandleNpcSetAnimKitCommand(ChatHandler* handler, char const* args)
  {
+     if (!*args)
+         return false;
+
+     uint16 animkit = atoi((char*)args);
 
      Creature* target = handler->getSelectedCreature();
      ObjectGuid::LowType guidLow = UI64LIT(0);
@@ -1520,7 +1534,7 @@ public:
 
      //Cot? SQL
      guidLow = target->GetSpawnId();
-     QueryResult guidSql = WorldDatabase.PQuery("SELECT guid FROM creature_addon WHERE guid = '{}'", guidLow);
+     QueryResult guidSql = WorldDatabase.PQuery("SELECT guid FROM creature_addon WHERE guid = %u", guidLow);
      if (!guidSql)
      {
            WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_INS_SET_ANIMKIT);
@@ -1539,9 +1553,84 @@ public:
       return true;
   }
 
+  //move selected creature
+  static bool HandleNpcGoCommand(ChatHandler* handler, char const* args)
+    {
+
+      if (!*args)
+          return false;
+
+      char const* xs = strtok((char*)args, " ");
+      char const* ys = strtok(NULL, " ");
+      char const* zs = strtok(NULL, " ");
+      char const* speeds = strtok(NULL, " ");
+
+      if (!xs || !ys || !zs || !speeds)
+          return false;
+
+      float x = 0;
+      float y = 0;
+      float z = 0;
+      float speed = 0;
+
+      x = atof(xs);
+      y = atof(ys);
+      z = atof(zs);
+      speed = atof(speeds);
+
+      ObjectGuid::LowType lowguid = UI64LIT(0);
+
+      Creature* creature = handler->getSelectedCreature();
+
+      if (!creature)
+      {
+          // number or [name] Shift-click form |color|Hcreature:creature_guid|h[name]|h|r
+          char* cId = handler->extractKeyFromLink((char*)args, "Hcreature");
+          if (!cId)
+              return false;
+
+          lowguid = atoull(cId);
+
+          // Attempting creature load from DB data
+          CreatureData const* data = sObjectMgr->GetCreatureData(lowguid);
+          if (!data)
+          {
+              handler->PSendSysMessage(LANG_COMMAND_CREATGUIDNOTFOUND, std::to_string(lowguid).c_str());
+              handler->SetSentErrorMessage(true);
+              return false;
+          }
+
+          uint32 map_id = data->spawnPoint.m_mapId;
+
+          if (handler->GetSession()->GetPlayer()->GetMapId() != map_id)
+          {
+              handler->PSendSysMessage(LANG_COMMAND_CREATUREATSAMEMAP, std::to_string(lowguid).c_str());
+              handler->SetSentErrorMessage(true);
+              return false;
+          }
+      }
+      else
+      {
+          lowguid = creature->GetSpawnId();
+      }
+
+      if (creature)
+      {
+          Position pos{ x, y, z };
+          creature->AI()->EnterEvadeMode();
+          creature->MonsterMoveWithSpeed(x, y, z, speed);
+      }
+
+      return true;
+  }
+
   // npc set anim
-  static bool HandleNpcSetAnimCommand(ChatHandler* handler, uint32 emote)
+  static bool HandleNpcSetAnimCommand(ChatHandler* handler, char const* args)
   {
+      if (!*args)
+          return false;
+
+      uint32 emote = atoi((char*)args);
 
       Creature* target = handler->getSelectedCreature();
         ObjectGuid::LowType guidLow = UI64LIT(0);
@@ -1556,7 +1645,7 @@ public:
 
         //Cot? SQL
         guidLow = target->GetSpawnId();
-        QueryResult guidSql = WorldDatabase.PQuery("SELECT guid FROM creature_addon WHERE guid = '{}'", guidLow);
+        QueryResult guidSql = WorldDatabase.PQuery("SELECT guid FROM creature_addon WHERE guid = %u", guidLow);
         if (!guidSql)
         {
             WorldDatabasePreparedStatement* stmt = WorldDatabase.GetPreparedStatement(WORLD_INS_SET_ANIM);

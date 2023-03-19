@@ -36,8 +36,8 @@ WorldPacket const* WorldPackets::Misc::InvalidatePlayer::Write()
 
 WorldPacket const* WorldPackets::Misc::LoginSetTimeSpeed::Write()
 {
-    _worldPacket << ServerTime;
-    _worldPacket << GameTime;
+    _worldPacket.AppendPackedTime(ServerTime);
+    _worldPacket.AppendPackedTime(GameTime);
     _worldPacket << float(NewSpeed);
     _worldPacket << uint32(ServerTimeHolidayOffset);
     _worldPacket << uint32(GameTimeHolidayOffset);
@@ -64,9 +64,7 @@ WorldPacket const* WorldPackets::Misc::SetCurrency::Write()
     _worldPacket.WriteBit(QuantityGainSource.has_value());
     _worldPacket.WriteBit(QuantityLostSource.has_value());
     _worldPacket.WriteBit(FirstCraftOperationID.has_value());
-    _worldPacket.WriteBit(NextRechargeTime.has_value());
-    _worldPacket.WriteBit(RechargeCycleStartTime.has_value());
-    _worldPacket.WriteBit(OverflownCurrencyID.has_value());
+    _worldPacket.WriteBit(LastSpendTime.has_value());
     _worldPacket.FlushBits();
 
     if (WeeklyQuantity)
@@ -93,14 +91,8 @@ WorldPacket const* WorldPackets::Misc::SetCurrency::Write()
     if (FirstCraftOperationID)
         _worldPacket << uint32(*FirstCraftOperationID);
 
-    if (NextRechargeTime)
-        _worldPacket << *NextRechargeTime;
-
-    if (RechargeCycleStartTime)
-        _worldPacket << *RechargeCycleStartTime;
-
-    if (OverflownCurrencyID)
-        _worldPacket << int32(*OverflownCurrencyID);
+    if (LastSpendTime)
+        _worldPacket << *LastSpendTime;
 
     return &_worldPacket;
 }
@@ -124,8 +116,7 @@ WorldPacket const* WorldPackets::Misc::SetupCurrency::Write()
         _worldPacket.WriteBit(data.TrackedQuantity.has_value());
         _worldPacket.WriteBit(data.MaxQuantity.has_value());
         _worldPacket.WriteBit(data.TotalEarned.has_value());
-        _worldPacket.WriteBit(data.NextRechargeTime.has_value());
-        _worldPacket.WriteBit(data.RechargeCycleStartTime.has_value());
+        _worldPacket.WriteBit(data.LastSpendTime.has_value());
         _worldPacket.WriteBits(uint8(data.Flags), 5);
         _worldPacket.FlushBits();
 
@@ -139,10 +130,8 @@ WorldPacket const* WorldPackets::Misc::SetupCurrency::Write()
             _worldPacket << int32(*data.MaxQuantity);
         if (data.TotalEarned)
             _worldPacket << int32(*data.TotalEarned);
-        if (data.NextRechargeTime)
-            _worldPacket << *data.NextRechargeTime;
-        if (data.RechargeCycleStartTime)
-            _worldPacket << *data.RechargeCycleStartTime;
+        if (data.LastSpendTime)
+            _worldPacket << *data.LastSpendTime;
     }
 
     return &_worldPacket;
@@ -411,11 +400,9 @@ WorldPacket const* WorldPackets::Misc::PlayMusic::Write()
 
 void WorldPackets::Misc::RandomRollClient::Read()
 {
-    bool hasPartyIndex = _worldPacket.ReadBit();
     _worldPacket >> Min;
     _worldPacket >> Max;
-    if (hasPartyIndex)
-        _worldPacket >> PartyIndex.emplace();
+    _worldPacket >> PartyIndex;
 }
 
 WorldPacket const* WorldPackets::Misc::RandomRoll::Write()
@@ -429,16 +416,9 @@ WorldPacket const* WorldPackets::Misc::RandomRoll::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Misc::EnableBarberShop::Write()
-{
-    _worldPacket << uint8(CustomizationScope);
-
-    return &_worldPacket;
-}
-
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Misc::PhaseShiftDataPhase const& phaseShiftDataPhase)
 {
-    data << uint32(phaseShiftDataPhase.PhaseFlags);
+    data << uint16(phaseShiftDataPhase.PhaseFlags);
     data << uint16(phaseShiftDataPhase.Id);
     return data;
 }
@@ -729,10 +709,10 @@ WorldPacket const* WorldPackets::Misc::AccountMountUpdate::Write()
     _worldPacket.WriteBit(IsFullUpdate);
     _worldPacket << uint32(Mounts->size());
 
-    for (auto [spellId, flags] : *Mounts)
+    for (auto const& spell : *Mounts)
     {
-        _worldPacket << int32(spellId);
-        _worldPacket.WriteBits(flags, 4);
+        _worldPacket << int32(spell.first);
+        _worldPacket.WriteBits(spell.second, 2);
     }
 
     _worldPacket.FlushBits();
@@ -789,7 +769,7 @@ WorldPacket const* WorldPackets::Misc::DisplayToast::Write()
             _worldPacket.WriteBit(BonusRoll);
             _worldPacket << Item;
             _worldPacket << int32(LootSpec);
-            _worldPacket << int8(Gender);
+            _worldPacket << int32(Gender);
             break;
         case DisplayToastType::NewCurrency:
             _worldPacket << uint32(CurrencyID);
@@ -807,6 +787,15 @@ WorldPacket const* WorldPackets::Misc::RuneforgeLegendaryCraftingOpenNpc::Write(
 {
     _worldPacket << ObjGUID;
     _worldPacket.WriteBit(IsUpgrade);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Misc::UIItemInteractionOpenNpc::Write()
+{
+    _worldPacket << ObjectGUID;
+    _worldPacket << int32(UiUnk1);
+    _worldPacket << int32(UiUnk2);
 
     return &_worldPacket;
 }

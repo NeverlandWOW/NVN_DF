@@ -312,7 +312,6 @@ bool CreatureAI::_EnterEvadeMode(EvadeReason /*why*/)
     me->CombatStop(true);
     if (!me->IsTapListNotClearedOnEvade())
         me->SetTappedBy(nullptr);
-
     me->ResetPlayerDamageReq();
     me->SetLastDamagedTime(0);
     me->SetCannotReachTarget(false);
@@ -324,7 +323,7 @@ bool CreatureAI::_EnterEvadeMode(EvadeReason /*why*/)
     return true;
 }
 
-Optional<QuestGiverStatus> CreatureAI::GetDialogStatus(Player const* /*player*/)
+Optional<QuestGiverStatus> CreatureAI::GetDialogStatus(Player* /*player*/)
 {
     return {};
 }
@@ -398,7 +397,7 @@ int32 CreatureAI::VisualizeBoundary(Seconds duration, Unit* owner, bool fill) co
                 point->SetUnitFlag(UNIT_FLAG_STUNNED);
                 point->SetImmuneToAll(true);
                 if (!hasOutOfBoundsNeighbor)
-                    point->SetUninteractible(true);
+                    point->SetUnitFlag(UNIT_FLAG_UNINTERACTIBLE);
             }
         }
 

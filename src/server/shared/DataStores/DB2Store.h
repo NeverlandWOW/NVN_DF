@@ -65,7 +65,6 @@ protected:
     std::vector<char*> _stringPool;
     char** _indexTable;
     uint32 _indexTableSize;
-    uint32 _minId;
 
     friend class UnitTestDataLoader;
 };
@@ -104,7 +103,7 @@ public:
     }
 #endif
 
-    iterator begin() const { return iterator(reinterpret_cast<T const* const*>(_indexTable), _indexTableSize, _minId); }
+    iterator begin() const { return iterator(reinterpret_cast<T const* const*>(_indexTable), _indexTableSize); }
     iterator end() const { return iterator(reinterpret_cast<T const* const*>(_indexTable), _indexTableSize, _indexTableSize); }
 };
 

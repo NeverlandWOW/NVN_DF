@@ -11,7 +11,6 @@
 #include "ElunaEventMgr.h"
 #include "ElunaIncludes.h"
 #include "ElunaTemplate.h"
-#include <iostream>
 
 using namespace Hooks;
 
@@ -33,9 +32,8 @@ using namespace Hooks;
 
 bool Eluna::OnAddonMessage(Player* sender, uint32 type, std::string& msg, Player* receiver, Guild* guild, Group* group, Channel* channel)
 {
-    std::cout << "PING" << std::endl;
     START_HOOK_WITH_RETVAL(ADDON_EVENT_ON_MESSAGE, true);
-    ELUNA_LOG_INFO("custom.AIO", "sender: {}\ntype: {}\nmsg: {}\nreceiver: {}", sender->GetName().c_str(), type, msg.c_str(), receiver->GetName().c_str());
+    TC_LOG_DEBUG("custom.AIO", "sender: %s\ntype: %u\nmsg: %s\nreceiver: %s", sender->GetName().c_str(), type, msg.c_str(), receiver->GetName().c_str());
     Push(sender);
     Push(type);
 
