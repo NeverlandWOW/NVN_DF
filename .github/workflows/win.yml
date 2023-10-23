@@ -1,14 +1,11 @@
-
 name: windows-build
 
 on:
   push:
-    paths-ignore:
-      - 'sql/**'    
-  pull_request:
+    branches: [ master, development, original-tc ]
     paths-ignore:
       - 'sql/**'
-      
+
 concurrency:
   group: ${{ github.head_ref }} || concat(${{ github.ref }}, ${{ github.workflow }})
   cancel-in-progress: true
@@ -19,14 +16,14 @@ env:
   BUILD_TYPE: Release
   REPO_DIR : ${{github.workspace}}
   BUILD_DIR: ${{github.workspace}}/bin/builddir
-  BOOST_TOOLSET: "msvc14.1"
-  BOOST_VERSION: "1.73.0"
+  BOOST_TOOLSET: "msvc14.3"
+  BOOST_VERSION: "1.80.0"
   BOOST_INSTALL_DIR: "${{github.workspace}}/bin"
-  
+
 jobs:
   build:
     runs-on: windows-2022
-    
+
     steps:
     #git checkout
     - uses: actions/checkout@v2
@@ -82,7 +79,7 @@ jobs:
         cd $GITHUB_WORKSPACE
         
         mkdir -p build && cd build
-        cmake .. -DTOOLS=ON -DELUNA=0 -A x64
+        cmake .. -DTOOLS=ON -A x64
         cmake --build . --config RelWithDebInfo --parallel 4
       #git bash shell
       shell: bash
@@ -94,8 +91,10 @@ jobs:
           #data is in Release folder
           cd ${{github.workspace}}/build/bin
           dir
-          copy "C:/Program Files/OpenSSL/bin/libcrypto-1_1-x64.dll" ${{github.workspace}}/build/bin/RelWithDebInfo/libssl-1_1-x64.dll
-          copy "c:/Program Files/OpenSSL/bin/libcrypto-1_1-x64.dll" ${{github.workspace}}/build/bin/RelWithDebInfo/libcrypto-1_1-x64.dll
+          copy c:/mysql/lib/libmysql.dll ${{github.workspace}}/build/bin/RelWithDebInfo/libmysql.dll
+          copy "c:/Program Files/OpenSSL-Win64/bin/libssl-1_1-x64.dll" ${{github.workspace}}/build/bin/RelWithDebInfo/libssl-1_1-x64.dll
+          copy "c:/Program Files/OpenSSL-Win64/bin/libcrypto-1_1-x64.dll" ${{github.workspace}}/build/bin/RelWithDebInfo/libcrypto-1_1-x64.dll
+          move ${{github.workspace}}/contrib/lua_scripts ${{github.workspace}}/build/bin/RelWithDebInfo/lua_scripts
           7z a -tzip ${{env.ARCHIVE_FILENAME}} RelWithDebInfo
     - name: Archive this artefact
       uses: actions/upload-artifact@v2
