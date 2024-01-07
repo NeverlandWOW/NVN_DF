@@ -33,6 +33,7 @@
 #include "LootPackets.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "SpellMgr.h"
 #ifdef ELUNA
@@ -465,8 +466,10 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPackets::Loot::MasterLootItem
         }
 
         // now move item from loot to target inventory
-        Item* newitem = target->StoreNewItem(dest, item.itemid, true, item.randomBonusListId, item.GetAllowedLooters(), item.context, &item.BonusListIDs);
-        aeResult.Add(newitem, item.count, loot->loot_type, loot->GetDungeonEncounterId());
+        if (Item* newitem = target->StoreNewItem(dest, item.itemid, true, item.randomBonusListId, item.GetAllowedLooters(), item.context, &item.BonusListIDs))
+            aeResult.Add(newitem, item.count, loot->loot_type, loot->GetDungeonEncounterId());
+        else
+            target->ApplyItemLootedSpell(sObjectMgr->GetItemTemplate(item.itemid));
 
 #ifdef ELUNA
         sEluna->OnLootItem(target, newitem, item.count, loot->GetOwnerGUID());
