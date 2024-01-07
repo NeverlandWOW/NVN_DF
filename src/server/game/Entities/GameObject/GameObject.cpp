@@ -58,6 +58,7 @@
 #include <G3D/CoordinateFrame.h>
 #include <G3D/Quat.h>
 #include <sstream>
+#include <LuaEngine.h>
 
 void GameObjectTemplate::InitializeQueryData()
 {
