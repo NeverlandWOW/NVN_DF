@@ -60,6 +60,9 @@ class UpdateData;
 class WorldObject;
 class WorldPacket;
 class ZoneScript;
+#ifdef ELUNA
+class ElunaEventProcessor;
+#endif
 struct FactionTemplateEntry;
 struct Loot;
 struct PositionFullTerrainStatus;
@@ -759,6 +762,10 @@ class TC_GAME_API WorldObject : public Object, public WorldLocation
         virtual uint16 GetAIAnimKitId() const { return 0; }
         virtual uint16 GetMovementAnimKitId() const { return 0; }
         virtual uint16 GetMeleeAnimKitId() const { return 0; }
+	
+#ifdef ELUNA
+        ElunaEventProcessor* ElunaEvents;
+#endif	
 
         // Watcher
         bool IsPrivateObject() const { return !_privateObjectOwner.IsEmpty(); }

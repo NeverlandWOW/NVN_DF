@@ -53,6 +53,9 @@
 #include "Transport.h"
 #include "Vehicle.h"
 #include "VMapFactory.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 #include "VMapManager2.h"
 #include "Weather.h"
 #include "WeatherMgr.h"
@@ -2547,6 +2550,13 @@ void Map::DelayedUpdate(uint32 t_diff)
 void Map::AddObjectToRemoveList(WorldObject* obj)
 {
     ASSERT(obj->GetMapId() == GetId() && obj->GetInstanceId() == GetInstanceId());
+	
+#ifdef ELUNA
+    if (Creature* creature = obj->ToCreature())
+        sEluna->OnRemove(creature);
+    else if (GameObject* gameobject = obj->ToGameObject())
+        sEluna->OnRemove(gameobject);
+#endif	
 
     obj->SetDestroyedObject(true);
     obj->CleanupsBeforeDelete(false);                            // remove or simplify at least cross referenced links
@@ -2953,8 +2963,20 @@ void InstanceMap::RemovePlayerFromMap(Player* player, bool remove)
 
 void InstanceMap::CreateInstanceData()
 {
-    if (i_data != nullptr)
+     if (i_data != nullptr)
         return;
+
+	bool isElunaAI = false;
+	
+	#ifdef ELUNA
+	    i_data = sEluna->GetInstanceData(this);
+	    if (i_data)
+	        isElunaAI = true;
+	#endif
+	
+	    // if Eluna AI was fetched succesfully we should not call CreateInstanceData nor set the unused scriptID
+	    if (!isElunaAI)
+	{
 
     InstanceTemplate const* mInstance = sObjectMgr->GetInstanceTemplate(GetId());
     if (mInstance)
@@ -2980,10 +3002,11 @@ void InstanceMap::CreateInstanceData()
     }
 
     InstanceLockData const* lockData = i_instanceLock->GetInstanceInitializationData();
+    i_data->SetCompletedEncountersMask(lockData->CompletedEncountersMask);
     i_data->SetEntranceLocation(lockData->EntranceWorldSafeLocId);
     if (!lockData->Data.empty())
     {
-        TC_LOG_DEBUG("maps", "Loading instance data for `{}` with id {}", sObjectMgr->GetScriptName(i_script_id), i_InstanceId);
+        TC_LOG_DEBUG("maps", "Loading instance data for `{}` with id {}", isElunaAI ? "ElunaAI" : sObjectMgr->GetScriptName(i_script_id), i_InstanceId);
         i_data->Load(lockData->Data.c_str());
     }
     else

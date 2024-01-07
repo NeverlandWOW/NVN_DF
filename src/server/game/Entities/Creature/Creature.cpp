@@ -50,6 +50,9 @@
 #include "TemporarySummon.h"
 #include "Vehicle.h"
 #include "World.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 #include "ZoneScript.h"
 #include <G3D/g3dmath.h>
 #include <sstream>
@@ -345,6 +348,10 @@ void Creature::AddToWorld()
 
         if (GetZoneScript())
             GetZoneScript()->OnCreatureCreate(this);
+		
+#ifdef ELUNA
+        sEluna->OnAddToWorld(this);
+#endif		
     }
 }
 
@@ -352,6 +359,9 @@ void Creature::RemoveFromWorld()
 {
     if (IsInWorld())
     {
+#ifdef ELUNA
+        sEluna->OnRemoveFromWorld(this);
+#endif		
         if (GetZoneScript())
             GetZoneScript()->OnCreatureRemove(this);
 

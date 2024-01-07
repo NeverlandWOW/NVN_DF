@@ -36,6 +36,9 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "SpellMgr.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 class AELootCreatureCheck
 {
@@ -196,6 +199,10 @@ void WorldSession::HandleLootMoneyOpcode(WorldPackets::Loot::LootMoney& /*packet
             packet.SoleLooter = true; // "You loot..."
             SendPacket(packet.Write());
         }
+		
+#ifdef ELUNA
+        sEluna->OnLootMoney(player, loot->gold);
+#endif		
 
         loot->LootMoney();
 

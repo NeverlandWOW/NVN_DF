@@ -57,6 +57,10 @@
 #include "VMapManager2.h"
 #include "World.h"
 #include <G3D/Vector3.h>
+#ifdef ELUNA
+#include "LuaEngine.h"
+#include "ElunaEventMgr.h"
+#endif
 #include <sstream>
 
 constexpr float VisibilityDistances[AsUnderlyingType(VisibilityDistanceType::Max)] =
@@ -873,6 +877,11 @@ m_currMap(nullptr), m_InstanceId(0), _dbPhase(0), m_notifyflags(0)
 
 WorldObject::~WorldObject()
 {
+#ifdef ELUNA
+    delete ElunaEvents;
+    ElunaEvents = NULL;
+#endif
+	
     // this may happen because there are many !create/delete
     if (IsWorldObject() && m_currMap)
     {
@@ -889,6 +898,10 @@ WorldObject::~WorldObject()
 void WorldObject::Update(uint32 diff)
 {
     m_Events.Update(diff);
+
+#ifdef ELUNA
+    ElunaEvents->Update(diff);
+#endif
 }
 
 void WorldObject::SetWorldObject(bool on)
@@ -1791,6 +1804,13 @@ void WorldObject::SetMap(Map* map)
     m_currMap = map;
     m_mapId = map->GetId();
     m_InstanceId = map->GetInstanceId();
+	
+#ifdef ELUNA
+    delete ElunaEvents;
+    // On multithread replace this with a pointer to map's Eluna pointer stored in a map
+    ElunaEvents = new ElunaEventProcessor(&Eluna::GEluna, this);
+#endif
+	
     if (IsWorldObject())
         m_currMap->AddWorldObject(this);
 }
@@ -1801,6 +1821,12 @@ void WorldObject::ResetMap()
     ASSERT(!IsInWorld());
     if (IsWorldObject())
         m_currMap->RemoveWorldObject(this);
+	
+#ifdef ELUNA
+    delete ElunaEvents;
+    ElunaEvents = NULL;
+#endif
+	
     m_currMap = nullptr;
     //maybe not for corpse
     //m_mapId = 0;
