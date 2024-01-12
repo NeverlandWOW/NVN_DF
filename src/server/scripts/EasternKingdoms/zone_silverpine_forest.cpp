@@ -871,8 +871,6 @@ struct npc_silverpine_grand_executor_mortuus : public ScriptedAI
 
         if (!UpdateVictim())
             return;
-
-        DoMeleeAttackIfReady();
     }
 
     void SummonPortalsFromOrgrimmar()
@@ -1281,8 +1279,6 @@ struct npc_silverpine_worgen_renegade : public ScriptedAI
                     break;
             }
         }
-
-        DoMeleeAttackIfReady();
     }
 
 private:
@@ -1358,8 +1354,6 @@ struct npc_silverpine_forsaken_trooper : public ScriptedAI
                     break;
             }
         }
-
-        DoMeleeAttackIfReady();
     }
 
 private:
@@ -3636,8 +3630,6 @@ struct npc_silverpine_forest_ettin : public ScriptedAI
 
         if (!UpdateVictim())
             return;
-
-        DoMeleeAttackIfReady();
     }
 
 private:
@@ -3941,8 +3933,6 @@ struct npc_silverpine_orc_sea_dog : public ScriptedAI
 
         if (!UpdateVictim())
             return;
-
-        DoMeleeAttackIfReady();
     }
 
 private:
@@ -4070,8 +4060,6 @@ struct npc_silverpine_skitterweb_matriarch : public ScriptedAI
 
         if (!UpdateVictim())
             return;
-
-        DoMeleeAttackIfReady();
     }
 
     void ScheduleCombatEvents(Unit* who)
@@ -4352,8 +4340,6 @@ struct npc_silverpine_agatha_fenris_isle : public ScriptedAI
 
         if (!UpdateVictim())
             return;
-
-        DoMeleeAttackIfReady();
     }
 
     void SetEventNoEscape()
@@ -4583,8 +4569,6 @@ struct npc_silverpine_hillsbrad_refugee : public ScriptedAI
                     break;
             }
         }
-
-        DoMeleeAttackIfReady();
     }
 
 private:
@@ -4739,8 +4723,6 @@ struct npc_silverpine_worgen_sentry : public ScriptedAI
                     break;
             }
         }
-
-        DoMeleeAttackIfReady();
     }
 
 private:
