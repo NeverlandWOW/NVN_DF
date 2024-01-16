@@ -22,6 +22,7 @@
 #include "Battleground.h"
 #include "BattlePetMgr.h"
 #include "CellImpl.h"
+#include "CharmInfo.h"
 #include "CollectionMgr.h"
 #include "CombatLogPackets.h"
 #include "Common.h"
@@ -3847,7 +3848,7 @@ void Spell::_cast(bool skipCheck)
             creatureCaster->ReleaseSpellFocus(this);
 
     // Okay, everything is prepared. Now we need to distinguish between immediate and evented delayed spells
-    if ((m_spellInfo->HasHitDelay() && !m_spellInfo->IsChanneled()) || m_spellInfo->HasAttribute(SPELL_ATTR4_NO_HARMFUL_THREAT))
+    if (m_spellInfo->HasHitDelay() && !m_spellInfo->IsChanneled())
     {
         // Remove used for cast item if need (it can be already NULL after TakeReagents call
         // in case delayed spell remove item at cast delay start
