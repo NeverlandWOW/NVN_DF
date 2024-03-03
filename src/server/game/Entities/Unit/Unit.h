@@ -1040,6 +1040,15 @@ class TC_GAME_API Unit : public WorldObject
         void SetInCombatWith(Unit* enemy, bool addSecondUnitSuppressed = false) { if (enemy) m_combatManager.SetInCombatWith(enemy, addSecondUnitSuppressed); }
         void ClearInCombat() { m_combatManager.EndAllCombat(); }
         void UpdatePetCombatState();
+
+        bool IsInteractionAllowedWhileHostile() const { return HasUnitFlag2(UNIT_FLAG2_INTERACT_WHILE_HOSTILE); }
+        virtual void SetInteractionAllowedWhileHostile(bool interactionAllowed);
+
+        bool IsInteractionAllowedInCombat() const { return HasUnitFlag3(UNIT_FLAG3_ALLOW_INTERACTION_WHILE_IN_COMBAT); }
+        virtual void SetInteractionAllowedInCombat(bool interactionAllowed);
+
+        virtual void UpdateNearbyPlayersInteractions();
+
         // Threat handling
         bool IsThreatened() const;
         bool IsThreatenedBy(Unit const* who) const { return who && m_threatManager.IsThreatenedBy(who, true); }
@@ -1725,10 +1734,7 @@ class TC_GAME_API Unit : public WorldObject
         virtual bool CanEnterWater() const = 0;
         virtual bool CanSwim() const;
 
-        float GetHoverOffset() const
-        {
-            return HasUnitMovementFlag(MOVEMENTFLAG_HOVER) ? *m_unitData->HoverHeight : 0.0f;
-        }
+        float GetHoverOffset() const { return HasUnitMovementFlag(MOVEMENTFLAG_HOVER) ? *m_unitData->HoverHeight : 0.0f; }
 
         void RewardRage(uint32 baseRage);
 
@@ -1770,6 +1776,13 @@ class TC_GAME_API Unit : public WorldObject
         virtual void Yell(uint32 textId, WorldObject const* target = nullptr);
         virtual void TextEmote(uint32 textId, WorldObject const* target = nullptr, bool isBossEmote = false);
         virtual void Whisper(uint32 textId, Player* target, bool isBossWhisper = false);
+
+        /**
+           @brief Clears boss emotes frame
+           @param zoneId Only clears emotes for players in that zone id
+           @param target Only clears emotes for that player
+        */
+        void ClearBossEmotes(Optional<uint32> zoneId = {}, Player const* target = nullptr) const;
 
         float GetCollisionHeight() const override;
         uint32 GetVirtualItemId(uint32 slot) const;

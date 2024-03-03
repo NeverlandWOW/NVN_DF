@@ -603,7 +603,7 @@ void Unit::UpdateSplinePosition()
             return;
     }
 
-    if (HasUnitState(UNIT_STATE_CANNOT_TURN))
+    if (HasUnitState(UNIT_STATE_LOST_CONTROL | UNIT_STATE_FOCUSING))
         loc.orientation = GetOrientation();
 
     UpdatePosition(loc.x, loc.y, loc.z, loc.orientation);
@@ -2841,7 +2841,8 @@ void Unit::_DeleteRemovedAuras()
 
 void Unit::_UpdateSpells(uint32 time)
 {
-    _spellHistory->Update();
+    if (!_spellHistory->IsPaused())
+        _spellHistory->Update();
 
     if (m_currentSpells[CURRENT_AUTOREPEAT_SPELL])
         _UpdateAutoRepeatSpell();
@@ -3161,10 +3162,23 @@ bool Unit::isInBackInMap(Unit const* target, float distance, float arc) const
 
 bool Unit::isInAccessiblePlaceFor(Creature const* c) const
 {
-    if (IsInWater())
-        return c->CanEnterWater();
-    else
-        return c->CanWalk() || c->CanFly();
+    // Aquatic creatures are not allowed to leave liquids
+    if (!IsInWater() && c->IsAquatic())
+        return false;
+
+    // Underwater special case. Some creatures may not go below liquid surfaces
+    if (IsUnderWater() && c->CannotPenetrateWater())
+        return false;
+
+    // Water checks
+    if (IsInWater() && !c->CanEnterWater())
+        return false;
+
+    // Some creatures are tied to the ocean floor and cannot chase swimming targets.
+    if (!IsOnOceanFloor() && c->IsUnderWater() && c->HasUnitFlag(UNIT_FLAG_CANT_SWIM))
+        return false;
+
+    return true;
 }
 
 bool Unit::IsInWater() const
@@ -3263,8 +3277,11 @@ Aura* Unit::_TryStackingOrRefreshingExistingAura(AuraCreateInfo& createInfo)
                 else
                     bp = int32(spellEffectInfo.BasePoints);
 
-                int32* oldBP = const_cast<int32*>(&(auraEff->m_baseAmount)); // todo 6.x review GetBaseAmount and GetCastItemGUID in this case
-                *oldBP = bp;
+                int32* oldBP = const_cast<int32*>(&(auraEff->m_baseAmount));
+                if (spellEffectInfo.EffectAttributes.HasFlag(SpellEffectAttributes::AuraPointsStack))
+                    *oldBP += bp;
+                else
+                    *oldBP = bp;
             }
 
             // correct cast item guid if needed
@@ -3426,7 +3443,7 @@ void Unit::_ApplyAura(AuraApplication* aurApp, uint32 effMask)
     if (Player* player = ToPlayer())
     {
         if (sConditionMgr->IsSpellUsedInSpellClickConditions(aurApp->GetBase()->GetId()))
-            player->UpdateVisibleGameobjectsOrSpellClicks();
+            player->UpdateVisibleObjectInteractions(false, true, false, false);
 
         player->FailCriteria(CriteriaFailEvent::GainAura, aurApp->GetBase()->GetId());
         player->StartCriteria(CriteriaStartEvent::GainAura, aurApp->GetBase()->GetId());
@@ -3521,7 +3538,7 @@ void Unit::_UnapplyAura(AuraApplicationMap::iterator& i, AuraRemoveMode removeMo
     if (Player* player = ToPlayer())
     {
         if (sConditionMgr->IsSpellUsedInSpellClickConditions(aurApp->GetBase()->GetId()))
-            player->UpdateVisibleGameobjectsOrSpellClicks();
+            player->UpdateVisibleObjectInteractions(false, true, false, false);
 
         player->FailCriteria(CriteriaFailEvent::LoseAura, aurApp->GetBase()->GetId());
     }
@@ -6935,6 +6952,11 @@ float Unit::SpellCritChanceDone(Spell* spell, AuraEffect const* aurEff, SpellSch
         case SPELL_DAMAGE_CLASS_NONE:
         case SPELL_DAMAGE_CLASS_MAGIC:
         {
+            auto getPhysicalCritChance = [&]
+            {
+                return GetUnitCriticalChanceDone(attackType);
+            };
+
             auto getMagicCritChance = [&]
             {
                 if (Player const* thisPlayer = ToPlayer())
@@ -6943,18 +6965,11 @@ float Unit::SpellCritChanceDone(Spell* spell, AuraEffect const* aurEff, SpellSch
                 return m_baseSpellCritChance;
             };
 
-            switch (schoolMask & SPELL_SCHOOL_MASK_NORMAL)
-            {
-                case SPELL_SCHOOL_MASK_NORMAL: // physical only
-                    crit_chance = GetUnitCriticalChanceDone(attackType);
-                    break;
-                case 0: // spell only
-                    crit_chance = getMagicCritChance();
-                    break;
-                default: // mix of physical and magic
-                    crit_chance = std::max(getMagicCritChance(), GetUnitCriticalChanceDone(attackType));
-                    break;
-            }
+            if (schoolMask & SPELL_SCHOOL_MASK_NORMAL)
+                crit_chance = std::max(crit_chance, getPhysicalCritChance());
+
+            if (schoolMask & ~SPELL_SCHOOL_MASK_NORMAL)
+                crit_chance = std::max(crit_chance, getMagicCritChance());
             break;
         }
         case SPELL_DAMAGE_CLASS_MELEE:
@@ -7968,6 +7983,7 @@ void Unit::Dismount()
     {
         player->EnablePetControlsOnDismount();
         player->ResummonPetTemporaryUnSummonedIfAny();
+        player->ResummonBattlePetTemporaryUnSummonedIfAny();
     }
 }
 
@@ -8680,6 +8696,9 @@ void Unit::AtEnterCombat()
 
     RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::EnteringCombat);
     Unit::ProcSkillsAndAuras(this, nullptr, PROC_FLAG_ENTER_COMBAT, PROC_FLAG_NONE, PROC_SPELL_TYPE_MASK_ALL, PROC_SPELL_PHASE_NONE, PROC_HIT_NONE, nullptr, nullptr, nullptr);
+
+    if (!IsInteractionAllowedInCombat())
+        UpdateNearbyPlayersInteractions();
 }
 
 void Unit::AtExitCombat()
@@ -8693,6 +8712,9 @@ void Unit::AtExitCombat()
     }
 
     RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::LeavingCombat);
+
+    if (!IsInteractionAllowedInCombat())
+        UpdateNearbyPlayersInteractions();
 }
 
 void Unit::AtTargetAttacked(Unit* target, bool canInitialAggro)
@@ -8729,6 +8751,34 @@ void Unit::UpdatePetCombatState()
         SetUnitFlag(UNIT_FLAG_PET_IN_COMBAT);
     else
         RemoveUnitFlag(UNIT_FLAG_PET_IN_COMBAT);
+}
+
+void Unit::SetInteractionAllowedWhileHostile(bool interactionAllowed)
+{
+    if (interactionAllowed)
+        SetUnitFlag2(UNIT_FLAG2_INTERACT_WHILE_HOSTILE);
+    else
+        RemoveUnitFlag2(UNIT_FLAG2_INTERACT_WHILE_HOSTILE);
+
+    UpdateNearbyPlayersInteractions();
+}
+
+void Unit::SetInteractionAllowedInCombat(bool interactionAllowed)
+{
+    if (interactionAllowed)
+        SetUnitFlag3(UNIT_FLAG3_ALLOW_INTERACTION_WHILE_IN_COMBAT);
+    else
+        RemoveUnitFlag3(UNIT_FLAG3_ALLOW_INTERACTION_WHILE_IN_COMBAT);
+
+    if (IsInCombat())
+        UpdateNearbyPlayersInteractions();
+}
+
+void Unit::UpdateNearbyPlayersInteractions()
+{
+    for (uint32 i = 0; i < m_unitData->NpcFlags.size(); ++i)
+        if (m_unitData->NpcFlags[i])
+            ForceUpdateFieldChange(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::NpcFlags, i));
 }
 
 //======================================================================
@@ -10930,7 +10980,7 @@ void Unit::SetControlled(bool apply, UnitState state)
                 SetStunned(false);
                 break;
             case UNIT_STATE_ROOT:
-                if (HasAuraType(SPELL_AURA_MOD_ROOT) || HasAuraType(SPELL_AURA_MOD_ROOT_2) || HasAuraType(SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY) || GetVehicle() || (ToCreature() && ToCreature()->IsTemplateRooted()))
+                if (HasAuraType(SPELL_AURA_MOD_ROOT) || HasAuraType(SPELL_AURA_MOD_ROOT_2) || HasAuraType(SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY) || GetVehicle() || (ToCreature() && ToCreature()->IsSessile()))
                     return;
 
                 ClearUnitState(state);
@@ -11055,20 +11105,22 @@ void Unit::SetFeared(bool apply)
         SetTarget(ObjectGuid::Empty);
 
         Unit* caster = nullptr;
-        Unit::AuraEffectList const& fearAuras = GetAuraEffectsByType(SPELL_AURA_MOD_FEAR);
+        AuraEffectList const& fearAuras = GetAuraEffectsByType(SPELL_AURA_MOD_FEAR);
         if (!fearAuras.empty())
             caster = ObjectAccessor::GetUnit(*this, fearAuras.front()->GetCasterGUID());
         if (!caster)
             caster = getAttackerForHelper();
         GetMotionMaster()->MoveFleeing(caster, fearAuras.empty() ? Milliseconds(sWorld->getIntConfig(CONFIG_CREATURE_FAMILY_FLEE_DELAY)) : 0ms);             // caster == NULL processed in MoveFleeing
+        SetUnitFlag(UNIT_FLAG_FLEEING);
     }
     else
     {
+        RemoveUnitFlag(UNIT_FLAG_FLEEING);
         if (IsAlive())
         {
             GetMotionMaster()->Remove(FLEEING_MOTION_TYPE);
-            if (GetVictim())
-                SetTarget(EnsureVictim()->GetGUID());
+            if (Unit const* victim = GetVictim())
+                SetTarget(victim->GetGUID());
             if (!IsPlayer() && !IsInCombat())
                 GetMotionMaster()->MoveTargetedHome();
         }
@@ -11268,9 +11320,6 @@ bool Unit::SetCharmedBy(Unit* charmer, CharmType type, AuraApplication const* au
     }
 
     AddUnitState(UNIT_STATE_CHARMED);
-
-    if (Creature* creature = ToCreature())
-        creature->RefreshCanSwimFlag();
 
     if ((GetTypeId() != TYPEID_PLAYER) || (charmer->GetTypeId() != TYPEID_PLAYER))
     {
@@ -11507,8 +11556,8 @@ bool Unit::IsInPartyWith(Unit const* unit) const
 
     if (u1->GetTypeId() == TYPEID_PLAYER && u2->GetTypeId() == TYPEID_PLAYER)
         return u1->ToPlayer()->IsInSameGroupWith(u2->ToPlayer());
-    else if ((u2->GetTypeId() == TYPEID_PLAYER && u1->GetTypeId() == TYPEID_UNIT && u1->ToCreature()->HasFlag(CREATURE_STATIC_FLAG_4_TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS)) ||
-        (u1->GetTypeId() == TYPEID_PLAYER && u2->GetTypeId() == TYPEID_UNIT && u2->ToCreature()->HasFlag(CREATURE_STATIC_FLAG_4_TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS)))
+    else if ((u2->GetTypeId() == TYPEID_PLAYER && u1->GetTypeId() == TYPEID_UNIT && u1->ToCreature()->IsTreatedAsRaidUnit()) ||
+        (u1->GetTypeId() == TYPEID_PLAYER && u2->GetTypeId() == TYPEID_UNIT && u2->ToCreature()->IsTreatedAsRaidUnit()))
         return true;
 
     return u1->GetTypeId() == TYPEID_UNIT && u2->GetTypeId() == TYPEID_UNIT && u1->GetFaction() == u2->GetFaction();
@@ -11526,8 +11575,8 @@ bool Unit::IsInRaidWith(Unit const* unit) const
 
     if (u1->GetTypeId() == TYPEID_PLAYER && u2->GetTypeId() == TYPEID_PLAYER)
         return u1->ToPlayer()->IsInSameRaidWith(u2->ToPlayer());
-    else if ((u2->GetTypeId() == TYPEID_PLAYER && u1->GetTypeId() == TYPEID_UNIT && u1->ToCreature()->HasFlag(CREATURE_STATIC_FLAG_4_TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS)) ||
-            (u1->GetTypeId() == TYPEID_PLAYER && u2->GetTypeId() == TYPEID_UNIT && u2->ToCreature()->HasFlag(CREATURE_STATIC_FLAG_4_TREAT_AS_RAID_UNIT_FOR_HELPFUL_SPELLS)))
+    else if ((u2->GetTypeId() == TYPEID_PLAYER && u1->GetTypeId() == TYPEID_UNIT && u1->ToCreature()->IsTreatedAsRaidUnit()) ||
+            (u1->GetTypeId() == TYPEID_PLAYER && u2->GetTypeId() == TYPEID_UNIT && u2->ToCreature()->IsTreatedAsRaidUnit()))
         return true;
 
     return u1->GetTypeId() == TYPEID_UNIT && u2->GetTypeId() == TYPEID_UNIT && u1->GetFaction() == u2->GetFaction();
@@ -12630,7 +12679,9 @@ void Unit::SetFacingTo(float ori, bool force)
     init.SetFacing(ori);
 
     //GetMotionMaster()->LaunchMoveSpline(std::move(init), EVENT_FACE, MOTION_PRIORITY_HIGHEST);
-    init.Launch();
+    UpdateSplineMovement(init.Launch());
+    if (Creature* creature = ToCreature())
+        creature->AI()->MovementInform(EFFECT_MOTION_TYPE, EVENT_FACE);
 }
 
 void Unit::SetFacingToObject(WorldObject const* object, bool force)
@@ -12645,7 +12696,9 @@ void Unit::SetFacingToObject(WorldObject const* object, bool force)
     init.SetFacing(GetAbsoluteAngle(object));   // when on transport, GetAbsoluteAngle will still return global coordinates (and angle) that needs transforming
 
     //GetMotionMaster()->LaunchMoveSpline(std::move(init), EVENT_FACE, MOTION_PRIORITY_HIGHEST);
-    init.Launch();
+    UpdateSplineMovement(init.Launch());
+    if (Creature* creature = ToCreature())
+        creature->AI()->MovementInform(EFFECT_MOTION_TYPE, EVENT_FACE);
 }
 
 void Unit::SetFacingToPoint(Position const& point, bool force)
@@ -12662,7 +12715,9 @@ void Unit::SetFacingToPoint(Position const& point, bool force)
     init.SetFacing(point.GetPositionX(), point.GetPositionY(), point.GetPositionZ());
 
     //GetMotionMaster()->LaunchMoveSpline(std::move(init), EVENT_FACE, MOTION_PRIORITY_HIGHEST);
-    init.Launch();
+    UpdateSplineMovement(init.Launch());
+    if (Creature* creature = ToCreature())
+        creature->AI()->MovementInform(EFFECT_MOTION_TYPE, EVENT_FACE);
 }
 
 bool Unit::SetWalk(bool enable)
@@ -12720,7 +12775,7 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->IsTemplateRooted())
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT))
     {
         if (IsGravityDisabled())
             SetAnimTier(AnimTier::Fly);
@@ -12946,7 +13001,7 @@ bool Unit::SetHover(bool enable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT) && !ToCreature()->IsTemplateRooted())
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT))
     {
         if (IsGravityDisabled())
             SetAnimTier(AnimTier::Fly);
@@ -13618,6 +13673,22 @@ void Unit::Whisper(uint32 textId, Player* target, bool isBossWhisper /*= false*/
     WorldPackets::Chat::Chat packet;
     packet.Initialize(isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, LANG_UNIVERSAL, this, target, DB2Manager::GetBroadcastTextValue(bct, locale, GetGender()), 0, "", locale);
     target->SendDirectMessage(packet.Write());
+}
+
+void Unit::ClearBossEmotes(Optional<uint32> zoneId, Player const* target) const
+{
+    WorldPackets::Chat::ClearBossEmotes clearBossEmotes;
+    clearBossEmotes.Write();
+
+    if (target)
+    {
+        target->SendDirectMessage(clearBossEmotes.GetRawPacket());
+        return;
+    }
+
+    for (MapReference const& ref : GetMap()->GetPlayers())
+        if (!zoneId || DB2Manager::IsInArea(ref.GetSource()->GetAreaId(), *zoneId))
+            ref.GetSource()->SendDirectMessage(clearBossEmotes.GetRawPacket());
 }
 
 SpellInfo const* Unit::GetCastSpellInfo(SpellInfo const* spellInfo, TriggerCastFlags& triggerFlag) const
