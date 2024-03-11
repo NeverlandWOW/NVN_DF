@@ -830,8 +830,7 @@ void Spell::SelectSpellTargets()
         if (m_spellInfo->HasAttribute(SPELL_ATTR8_REQUIRES_LOCATION_TO_BE_ON_LIQUID_SURFACE))
         {
             ZLiquidStatus status = m_caster->GetMap()->GetLiquidStatus(m_caster->GetPhaseShift(),
-                m_targets.GetDstPos()->GetPositionX(), m_targets.GetDstPos()->GetPositionY(), m_targets.GetDstPos()->GetPositionZ(),
-                map_liquidHeaderTypeFlags::AllLiquids);
+                m_targets.GetDstPos()->GetPositionX(), m_targets.GetDstPos()->GetPositionY(), m_targets.GetDstPos()->GetPositionZ());
             if (!(status & (LIQUID_MAP_WATER_WALK | LIQUID_MAP_IN_WATER)))
             {
                 SendCastResult(SPELL_FAILED_NO_LIQUID);
@@ -1512,7 +1511,7 @@ void Spell::SelectImplicitCasterDestTargets(SpellEffectInfo const& spellEffectIn
             float ground = m_caster->GetMapHeight(x, y, z);
             float liquidLevel = VMAP_INVALID_HEIGHT_VALUE;
             LiquidData liquidData;
-            if (m_caster->GetMap()->GetLiquidStatus(m_caster->GetPhaseShift(), x, y, z, map_liquidHeaderTypeFlags::AllLiquids, &liquidData, m_caster->GetCollisionHeight()))
+            if (m_caster->GetMap()->GetLiquidStatus(m_caster->GetPhaseShift(), x, y, z, {}, &liquidData, m_caster->GetCollisionHeight()))
                 liquidLevel = liquidData.level;
 
             if (liquidLevel <= ground) // When there is no liquid Map::GetWaterOrGroundLevel returns ground level
@@ -3028,6 +3027,12 @@ void Spell::TargetInfo::DoDamageAndTriggers(Spell* spell)
 
                 if (effMask)
                     _spellHitTarget->_ApplyAura(aurApp, effMask);
+
+                if (aurApp->IsNeedClientUpdate() && aurApp->GetRemoveMode() == AURA_REMOVE_NONE)
+                {
+                    aurApp->ClientUpdate(false);
+                    _spellHitTarget->RemoveVisibleAuraUpdate(aurApp);
+                }
             }
         }
 
