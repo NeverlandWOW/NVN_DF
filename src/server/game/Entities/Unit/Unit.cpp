@@ -5549,12 +5549,43 @@ void Unit::SendAttackStateUpdate(uint32 HitInfo, Unit* target, uint8 /*SwingType
     SendAttackStateUpdate(&dmgInfo);
 }
 
-void Unit::SetPowerType(Powers new_powertype, bool sendUpdate/* = true*/)
+void Unit::SetPowerType(Powers power, bool sendUpdate/* = true*/, bool onInit /*= false*/)
 {
-    if (GetPowerType() == new_powertype)
+    if (!onInit && GetPowerType() == power)
         return;
 
-    SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::DisplayPower), new_powertype);
+    PowerTypeEntry const* powerTypeEntry = sDB2Manager.GetPowerTypeEntry(power);
+    if (!powerTypeEntry)
+        return;
+
+    if (IsCreature() && !powerTypeEntry->GetFlags().HasFlag(PowerTypeFlags::IsUsedByNPCs))
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Unit::m_unitData).ModifyValue(&UF::UnitData::DisplayPower), power);
+
+    // Update max power
+    UpdateMaxPower(power);
+
+    // Update current power
+    if (!onInit)
+    {
+        switch (power)
+        {
+            case POWER_MANA: // Keep the same (druid form switching...)
+            case POWER_ENERGY:
+                break;
+            case POWER_RAGE: // Reset to zero
+                SetPower(POWER_RAGE, 0);
+            break;
+            case POWER_FOCUS: // Make it full
+                SetFullPower(power);
+            break;
+            default:
+                break;
+        }
+    }
+    else
+        SetInitialPowerValue(power);
 
     if (!sendUpdate)
         return;
@@ -5569,25 +5600,18 @@ void Unit::SetPowerType(Powers new_powertype, bool sendUpdate/* = true*/)
         if (pet->isControlled())
             pet->SetGroupUpdateFlag(GROUP_UPDATE_FLAG_PET_POWER_TYPE);
     }*/
+}
 
-    // Update max power
-    UpdateMaxPower(new_powertype);
+void Unit::SetInitialPowerValue(Powers powerType)
+{
+    PowerTypeEntry const* powerTypeEntry = sDB2Manager.GetPowerTypeEntry(powerType);
+    if (!powerTypeEntry)
+        return;
 
-    // Update current power
-    switch (new_powertype)
-    {
-        case POWER_MANA: // Keep the same (druid form switching...)
-        case POWER_ENERGY:
-            break;
-        case POWER_RAGE: // Reset to zero
-            SetPower(POWER_RAGE, 0);
-            break;
-        case POWER_FOCUS: // Make it full
-            SetFullPower(new_powertype);
-            break;
-        default:
-            break;
-    }
+    if (powerTypeEntry->GetFlags().HasFlag(PowerTypeFlags::UnitsUseDefaultPowerOnInit))
+        SetPower(powerType, powerTypeEntry->DefaultPower);
+    else
+        SetFullPower(powerType);
 }
 
 Powers Unit::CalculateDisplayPowerType() const
@@ -5625,13 +5649,8 @@ Powers Unit::CalculateDisplayPowerType() const
                     if (PowerDisplayEntry const* powerDisplay = sPowerDisplayStore.LookupEntry(vehicle->GetVehicleInfo()->PowerDisplayID[0]))
                         displayPower = Powers(powerDisplay->ActualType);
                 }
-                else if (Pet const* pet = ToPet())
-                {
-                    if (pet->getPetType() == HUNTER_PET) // Hunter pets have focus
-                        displayPower = POWER_FOCUS;
-                    else if (pet->IsPetGhoul() || pet->IsPetAbomination()) // DK pets have energy
-                        displayPower = POWER_ENERGY;
-                }
+                else if (IsHunterPet())
+                    displayPower = POWER_FOCUS;
             }
             break;
         }
@@ -8086,9 +8105,8 @@ MountCapabilityEntry const* Unit::GetMountCapability(uint32 mountType) const
             continue;
 
         if (Player const* thisPlayer = ToPlayer())
-            if (PlayerConditionEntry const* playerCondition = sPlayerConditionStore.LookupEntry(mountCapability->PlayerConditionID))
-                if (!ConditionMgr::IsPlayerMeetingCondition(thisPlayer, playerCondition))
-                    continue;
+            if (!ConditionMgr::IsPlayerMeetingCondition(thisPlayer, mountCapability->PlayerConditionID))
+                continue;
 
         return mountCapability;
     }
@@ -12807,16 +12825,6 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT))
-    {
-        if (IsGravityDisabled())
-            SetAnimTier(AnimTier::Fly);
-        else if (IsHovering())
-            SetAnimTier(AnimTier::Hover);
-        else
-            SetAnimTier(AnimTier::Ground);
-    }
-
     if (IsAlive())
     {
         if (IsGravityDisabled() || IsHovering())
@@ -12826,6 +12834,16 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
     }
     else if (IsPlayer()) // To update player who dies while flying/hovering
         SetPlayHoverAnim(false, false);
+
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT))
+    {
+        if (IsGravityDisabled())
+            SetAnimTier(AnimTier::Fly);
+        else if (IsHovering())
+            SetAnimTier(AnimTier::Hover);
+        else
+            SetAnimTier(AnimTier::Ground);
+    }
 
     return true;
 }
@@ -13033,16 +13051,6 @@ bool Unit::SetHover(bool enable, bool updateAnimTier /*= true*/)
         SendMessageToSet(packet.Write(), true);
     }
 
-    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT))
-    {
-        if (IsGravityDisabled())
-            SetAnimTier(AnimTier::Fly);
-        else if (IsHovering())
-            SetAnimTier(AnimTier::Hover);
-        else
-            SetAnimTier(AnimTier::Ground);
-    }
-
     if (IsAlive())
     {
         if (IsGravityDisabled() || IsHovering())
@@ -13052,6 +13060,16 @@ bool Unit::SetHover(bool enable, bool updateAnimTier /*= true*/)
     }
     else if (IsPlayer()) // To update player who dies while flying/hovering
         SetPlayHoverAnim(false, false);
+
+    if (IsCreature() && updateAnimTier && IsAlive() && !HasUnitState(UNIT_STATE_ROOT))
+    {
+        if (IsGravityDisabled())
+            SetAnimTier(AnimTier::Fly);
+        else if (IsHovering())
+            SetAnimTier(AnimTier::Hover);
+        else
+            SetAnimTier(AnimTier::Ground);
+    }
 
     return true;
 }
